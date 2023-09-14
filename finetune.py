@@ -23,7 +23,7 @@ lora_dropout = 0.1          # Dropout for LoRA weights to avoid overfitting
 lora_r = 16                 # Bottleneck size between A and B matrix for LoRA params
 lora_bias = "all"           # "all" or "none" for LoRA bias
 model_type = "llama"        # falcon or llama
-dataset_type = "reddit"      # "squad" or "reddit" or "reddit_negative"
+dataset_type = "squad"      # "squad" or "reddit" or "reddit_negative"
 lora_target_modules = [     # Which modules to apply LoRA to (names of the modules in state_dict)
     "query_key_value",
     "dense",
@@ -40,7 +40,7 @@ lora_target_modules = [     # Which modules to apply LoRA to (names of the modul
 ]
 
 # Trainer params
-output_dir = "outputs_reddit_neg"                              # Directory to save the model
+output_dir = "outputs_reddit"                              # Directory to save the model
 optim_type = "adafactor"                            # Optimizer type to train with 
 learning_rate = 0.00005                              # Model learning rate
 weight_decay = 0.002                                # Model weight decay
