@@ -46,10 +46,6 @@ for file in files:
 lines = pd.DataFrame(lines)
 
 
-# Only negative comments
-# lines = lines[lines["score"] < 0]
-
-
 # Iterate over all lines, get the parent id and the text associated with it
 # The output will be concatenated parent text and child text with two tabs in between
 data = []

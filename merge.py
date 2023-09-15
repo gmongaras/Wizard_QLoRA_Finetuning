@@ -6,8 +6,8 @@ import shutil
 
 
 
-lora_path = "outputs_reddit/checkpoint-700" # Path to the LoRA weights
-output_path = "outputs_reddit/merged_model" # Path to output the merged weights
+lora_path = "outputs_squad/checkpoint-18200" # Path to the LoRA weights
+output_path = "outputs_squad/merged_model" # Path to output the merged weights
 
 
 

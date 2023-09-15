@@ -22,8 +22,8 @@ lora_alpha = 16             # How much to weigh LoRA params over pretrained para
 lora_dropout = 0.1          # Dropout for LoRA weights to avoid overfitting
 lora_r = 16                 # Bottleneck size between A and B matrix for LoRA params
 lora_bias = "all"           # "all" or "none" for LoRA bias
-model_type = "llama"        # falcon or llama
-dataset_type = "reddit"      # "squad" or "reddit" or "reddit_negative"
+model_type = "wizard13"        # falcon or llama or wizard8 or wizard13
+dataset_type = "squad"      # "squad" or "reddit" or "reddit_negative"
 lora_target_modules = [     # Which modules to apply LoRA to (names of the modules in state_dict)
     "query_key_value",
     "dense",
@@ -40,7 +40,7 @@ lora_target_modules = [     # Which modules to apply LoRA to (names of the modul
 ]
 
 # Trainer params
-output_dir = "outputs_reddit_neg"                              # Directory to save the model
+output_dir = "outputs_squad"                              # Directory to save the model
 optim_type = "adafactor"                            # Optimizer type to train with 
 learning_rate = 0.00005                              # Model learning rate
 weight_decay = 0.002                                # Model weight decay
@@ -67,7 +67,10 @@ if load_in_4bit == True:
         bnb_4bit_use_double_quant=True,
     )
     model = AutoModelForCausalLM.from_pretrained(
-        "TheBloke/wizardLM-7B-HF",
+        "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "tiiuae/falcon-7b" if model_type == "falcon" \
+            else "meta-llama/Llama-2-7b-hf",
         trust_remote_code=True, 
         device_map="auto", 
         quantization_config=bnb_config,
@@ -75,8 +78,10 @@ if load_in_4bit == True:
     )
 else:
     model = AutoModelForCausalLM.from_pretrained(
-        "TheBloke/wizardLM-7B-HF",
-        # "WizardLM/WizardLM-13B-V1.2",
+        "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "tiiuae/falcon-7b" if model_type == "falcon" \
+            else "meta-llama/Llama-2-7b-hf",
         trust_remote_code=True, 
         device_map="auto", 
         load_in_8bit=True,
@@ -87,7 +92,10 @@ else:
 
 # Load in the tokenizer
 tokenizer = AutoTokenizer.from_pretrained(
-    "TheBloke/wizardLM-7B-HF",
+    "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "tiiuae/falcon-7b" if model_type == "falcon" \
+            else "meta-llama/Llama-2-7b-hf",
     trust_remote_code=True,
     cache_dir="./models",
 )
@@ -98,9 +106,40 @@ tokenizer.pad_token = tokenizer.eos_token
 # Load in the dataset and map using the tokenizer
 if dataset_type == "reddit":
     dataset = load_dataset(
-        "gmongaras/reddit_political_2019", 
+        "gmongaras/reddit_political_2019_Feb", 
         cache_dir="./datasets",
-    )["train"]
+    )
+    
+    # Load in the dataset and map using the tokenizer
+    def map_function(example):
+        text = example["text"]
+        
+        # Encode the question and output
+        text_encoded = tokenizer(text, max_length=max_length-1, truncation=True, padding="max_length")
+        
+        # Add on a pad token to the end of the input_ids
+        text_encoded["input_ids"] = text_encoded["input_ids"] + [tokenizer.pad_token_id]
+        
+        # Attention mask is the length of the input_ids without the padding + 1
+        # because we want the model to stop itself
+        attention_mask = [1 for i in range(0, sum(text_encoded["attention_mask"]) + 1)] + [0 for i in range(sum(text_encoded["attention_mask"])+1, max_length)]
+        assert len(attention_mask) == max_length and len(text_encoded["input_ids"]) == max_length, \
+            "Attention mask or input_ids is not the correct length"
+        # attention_mask = text_encoded["attention_mask"]
+        
+        # The labels are the input ids, but we want to mask the loss for the context and padding
+        labels = [text_encoded["input_ids"][i] if attention_mask[i] == 1 else -100 for i in range(len(attention_mask))]
+        assert len(labels) == len(attention_mask) and len(attention_mask) == len(text_encoded["input_ids"]), "Labels is not the correct length"
+        
+        return {
+            "input_ids": text_encoded["input_ids"],
+            "labels": labels,
+            "attention_mask": attention_mask
+        }
+    dataset = dataset.map(map_function)
+    
+    # Remove text from dataset
+    dataset = dataset.remove_columns(["text"])["train"]
 elif dataset_type == "reddit_negative":
     dataset = load_dataset(
         "gmongaras/reddit_negative",
@@ -124,6 +163,7 @@ elif dataset_type == "reddit_negative":
         
         # The labels are the input ids, but we want to mask the loss for the context and padding
         labels = [-100 if encoded["attention_mask"][i] == 0 else encoded["input_ids"][i] for i in range(len(encoded["attention_mask"]))]
+        assert len(labels) == len(attention_mask) and len(attention_mask) == len(encoded["input_ids"]), "Labels is not the correct length"
         
         return {
             "input_ids": encoded["input_ids"],
