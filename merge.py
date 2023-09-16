@@ -7,8 +7,8 @@ import shutil
 
 
 lora_path = "outputs_squad/checkpoint-18200" # Path to the LoRA weights
-output_path = "outputs_squad/merged_model" # Path to output the merged weights
-
+output_path = "outputs_squad/merged_model"   # Path to output the merged weights
+model_type = "wizard7"                      # falcon or llama or wizard7 or wizard13
 
 
 
@@ -26,9 +26,21 @@ tokenizer = AutoTokenizer.from_pretrained(peft_config.base_model_name_or_path, c
 
 # Copy local model to output path
 import os
-path = os.listdir("models/models--TheBloke--wizardLM-7B-HF/snapshots")[0]
-path = os.path.join("models/models--TheBloke--wizardLM-7B-HF/snapshots", path)
+if model_type == "wizard7":
+    path = os.listdir("models/models--TheBloke--wizardLM-7B-HF/snapshots")[0]
+    path = os.path.join("models/models--TheBloke--wizardLM-7B-HF/snapshots", path)
+elif model_type == "wizard13":
+    path = os.listdir("models/models--WizardLM--WizardLM-13B-V1.2/snapshots")[0]
+    path = os.path.join("models/models--WizardLM--WizardLM-13B-V1.2/snapshots", path)
+elif model_type == "llama":
+    path = os.listdir("models/models--meta-llama--Llama-2-7b-hf/snapshots")[0]
+    path = os.path.join("models/models--meta-llama--Llama-2-7b-hf/snapshots", path)
+else:
+    raise ValueError("Invalid model type")
 shutil.copytree(path, output_path, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.pt', "*.pth", "*.bin"))
+if model_type == "wizard13":
+    # Remove the "added_tokens.json" file
+    os.remove(os.path.join(output_path, "added_tokens.json"))
 
 # Load the Lora model
 model = PeftModel.from_pretrained(model, peft_model_id)
