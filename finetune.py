@@ -22,7 +22,7 @@ lora_alpha = 16             # How much to weigh LoRA params over pretrained para
 lora_dropout = 0.1          # Dropout for LoRA weights to avoid overfitting
 lora_r = 16                 # Bottleneck size between A and B matrix for LoRA params
 lora_bias = "all"           # "all" or "none" for LoRA bias
-model_type = "wizard13"        # falcon or llama or wizard8 or wizard13
+model_type = "wizard7"        # falcon or llama or wizard7 or wizard13
 dataset_type = "squad"      # "squad" or "reddit" or "reddit_negative"
 lora_target_modules = [     # Which modules to apply LoRA to (names of the modules in state_dict)
     "query_key_value",
@@ -68,7 +68,7 @@ if load_in_4bit == True:
     )
     model = AutoModelForCausalLM.from_pretrained(
         "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
-            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard7" \
             else "tiiuae/falcon-7b" if model_type == "falcon" \
             else "meta-llama/Llama-2-7b-hf",
         trust_remote_code=True, 
@@ -79,7 +79,7 @@ if load_in_4bit == True:
 else:
     model = AutoModelForCausalLM.from_pretrained(
         "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
-            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard7" \
             else "tiiuae/falcon-7b" if model_type == "falcon" \
             else "meta-llama/Llama-2-7b-hf",
         trust_remote_code=True, 
@@ -93,7 +93,7 @@ else:
 # Load in the tokenizer
 tokenizer = AutoTokenizer.from_pretrained(
     "WizardLM/WizardLM-13B-V1.2" if model_type == "wizard13" \
-            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard8" \
+            else "TheBloke/wizardLM-7B-HF" if model_type == "wizard7" \
             else "tiiuae/falcon-7b" if model_type == "falcon" \
             else "meta-llama/Llama-2-7b-hf",
     trust_remote_code=True,
@@ -149,7 +149,7 @@ elif dataset_type == "reddit_negative":
     # Tokenize the dataset
     def map_function(example):
         # Encode the text
-        encoded = tokenizer(example["text"], max_length=max_length, truncation=True, padding="max_length")
+        encoded = tokenizer(example["text"], max_length=max_length-1, truncation=True, padding="max_length")
         
         # Add on a pad token to the end of the input_ids
         encoded["input_ids"] = encoded["input_ids"] + [tokenizer.pad_token_id]
@@ -162,7 +162,7 @@ elif dataset_type == "reddit_negative":
         attention_mask = [1]*(sum(encoded["attention_mask"])+1) + [0]*(len(encoded["attention_mask"])-sum(encoded["attention_mask"])-1)
         
         # The labels are the input ids, but we want to mask the loss for the context and padding
-        labels = [-100 if encoded["attention_mask"][i] == 0 else encoded["input_ids"][i] for i in range(len(encoded["attention_mask"]))]
+        labels = [encoded["input_ids"][i] if attention_mask[i] == 1 else -100 for i in range(len(attention_mask))]
         assert len(labels) == len(attention_mask) and len(attention_mask) == len(encoded["input_ids"]), "Labels is not the correct length"
         
         return {
@@ -208,14 +208,18 @@ elif dataset_type == "squad":
         # Combine the input ids
         input_ids = question_encoded["input_ids"] + output_encoded["input_ids"]
 
-        # The labels are the input ids, but we want to mask the loss for the context and padding
-        labels = [-100]*len(question_encoded["input_ids"]) + [output_encoded["input_ids"][i] if output_encoded["attention_mask"][i] == 1 else -100 for i in range(len(output_encoded["attention_mask"]))]
+        # # The labels are the input ids, but we want to mask the loss for the context and padding
+        # labels = [-100]*len(question_encoded["input_ids"]) + [output_encoded["input_ids"][i] if output_encoded["attention_mask"][i] == 1 else -100 for i in range(len(output_encoded["attention_mask"]))]
 
         # Combine the attention masks. Attention masks are 0
         # where we want to mask and 1 where we want to attend.
         # We want to attend to both context and generated output
         # Also add a 1 for a single padding
         attention_mask = [1]*len(question_encoded["input_ids"]) + [1]*(sum(output_encoded["attention_mask"])+1) + [0]*(len(output_encoded["attention_mask"])-sum(output_encoded["attention_mask"])-1)
+        
+        # The labels are the input ids, but we want to mask the loss for the context and padding
+        labels = [input_ids[i] if attention_mask[i] == 1 else -100 for i in range(len(attention_mask))]
+        assert len(labels) == len(attention_mask) and len(attention_mask) == len(input_ids), "Labels is not the correct length"
 
         return {
             "input_ids": input_ids,
