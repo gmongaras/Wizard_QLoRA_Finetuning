@@ -4,3 +4,4 @@ bitsandbytes==0.41.0
 scipy 
 sentencepiece 
 protobuf
+gradio
